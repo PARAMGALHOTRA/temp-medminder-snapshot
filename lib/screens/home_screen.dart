@@ -6,6 +6,7 @@ import 'package:medminder/screens/medication_form_screen.dart';
 import 'package:medminder/services/firestore_service.dart';
 import 'package:medminder/theme/app_theme.dart';
 import 'package:medminder/utils/app_texts.dart';
+import 'package:share_plus/share_plus.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,6 +23,14 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _currentTip = AppTexts.getRandomTip();
     });
+  }
+
+  void _shareProgress(double progress) {
+    final percentage = (progress * 100).toInt();
+    Share.share(
+      'I\'ve taken $percentage% of my medications today! Keeping up with my health goals via MedMinder.',
+      subject: 'My MedMinder Progress',
+    );
   }
 
   @override
@@ -130,7 +139,17 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Your Daily Progress', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Your Daily Progress', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                IconButton(
+                  onPressed: () => _shareProgress(progress),
+                  icon: Icon(Icons.share, color: theme.colorScheme.primary),
+                  tooltip: 'Share Progress',
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             Row(
               children: [
