@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'user_details_screen.dart';
+import 'package:medminder/screens/welcome_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -14,7 +14,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   String _email = '';
   String _password = '';
-  final String _confirmPassword = '';
+  String _confirmPassword = '';
   String _fullName = '';
   bool _isLogin = true;
   String? _error;
@@ -45,7 +45,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
         if (mounted) {
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const UserDetailsScreen()),
+            MaterialPageRoute(builder: (_) => const WelcomeScreen()),
           );
         }
       }
