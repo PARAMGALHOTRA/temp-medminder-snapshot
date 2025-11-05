@@ -40,7 +40,8 @@ class _AppShellState extends State<AppShell> {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const MedicationFormScreen()),
+                  MaterialPageRoute(
+                      builder: (context) => const MedicationFormScreen()),
                 );
               },
               child: const Icon(Icons.add),

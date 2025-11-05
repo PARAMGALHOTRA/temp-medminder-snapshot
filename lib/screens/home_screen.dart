@@ -1,17 +1,12 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
 import 'package:medminder/models/medicine.dart';
 import 'package:medminder/screens/medication_form_screen.dart';
-import 'package:medminder/screens/order_screen.dart';
-import 'package:medminder/services/daily_reset_service.dart';
-import 'package:medminder/services/firestore_service.dart';
+import 'package:medminder/widgets/medication_tile.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:medminder/services/notification_service.dart';
-import 'package:medminder/theme/app_theme.dart';
-import 'package:medminder/utils/app_texts.dart';
-import 'package:share_plus/share_plus.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,515 +15,254 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+class _HomeScreenState extends State<HomeScreen> {
   final user = FirebaseAuth.instance.currentUser;
-  String _currentTip = AppTexts.getRandomTip();
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    if (user != null) {
-      DailyResetService.checkAndResetDailyMedications(user!.uid);
-    }
+  Stream<List<Medicine>> _getMedicines() {
+    if (user == null) return Stream.value([]);
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('medicines')
+        .orderBy('nextDose')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => Medicine.fromMap(doc.data(), doc.id))
+            .toList());
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && user != null) {
-      FirestoreService.logSkippedDoses(user!.uid);
-    }
-  }
-
-  void _changeTip() {
-    setState(() {
-      _currentTip = AppTexts.getRandomTip();
-    });
-  }
-
-  void _shareProgress(double progress) {
-    final percentage = (progress * 100).toInt();
-    Share.share(
-      'I\'ve taken $percentage% of my medications today! Keeping up with my health goals via MedMinder.',
-      subject: 'My MedMinder Progress',
+  void _addMedicine() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const MedicationFormScreen()),
     );
   }
 
-  Future<void> _deleteMedicine(Medicine medicine) async {
-    if (user == null || medicine.id == null) return;
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Medicine?'),
-        content: Text('Are you sure you want to delete ${medicine.name}? This action cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+  void _editMedicine(Medicine medicine) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MedicationFormScreen(medicine: medicine),
       ),
     );
+  }
 
-    if (confirm == true) {
-      await FirestoreService.deleteMedicine(user!.uid, medicine.id!);
+  void _deleteMedicine(String medicineId) {
+    if (user == null) return;
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('medicines')
+        .doc(medicineId)
+        .delete();
+  }
+
+  void _toggleTaken(Medicine medicine) async {
+    if (user == null) return;
+
+    final updatedMedicine = medicine.copyWith(
+      isCompleted: !medicine.isCompleted,
+      // You might want to update nextDose here based on your logic
+    );
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('medicines')
+        .doc(medicine.id)
+        .update(updatedMedicine.toMap());
+
+    if (updatedMedicine.isCompleted) {
       await NotificationService().cancelNotification(medicine.hashCode);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${medicine.name} deleted successfully.')),
-        );
-      }
+    } else {
+      await NotificationService().scheduleNotification(
+        medicine.hashCode,
+        'Medication Reminder',
+        'Time to take your ${medicine.name}',
+        updatedMedicine.nextDose,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final String formattedDate = DateFormat.yMMMMd().format(DateTime.now());
 
-    return StreamBuilder<List<Medicine>>(
-      stream: FirestoreService.getMedicinesStream(user!.uid),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-        final medicines = snapshot.data ?? [];
-
-        if (medicines.isEmpty) {
-          return _buildEmptyState(context, theme);
-        }
-
-        final takenMedicines = medicines.where((m) => m.isCompleted).length;
-        final progress = medicines.isEmpty ? 0.0 : takenMedicines / medicines.length;
-
-        return CustomScrollView(
-          slivers: [
-            _buildAppBar(theme, context),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildDailyProgress(theme, progress, takenMedicines, medicines.length),
-                    const SizedBox(height: 24),
-                    if (medicines.any((m) => !m.isCompleted))
-                      _buildNextUp(theme, medicines.firstWhere((m) => !m.isCompleted)),
-                    const SizedBox(height: 24),
-                    _buildTipsCard(theme),
-                    const SizedBox(height: 24),
-                    _buildMedicineList(theme, medicines),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-    Widget _buildEmptyState(BuildContext context, ThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.medical_services_outlined,
-              size: 100,
-              color: theme.colorScheme.primary.withOpacity(0.5),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Your Cabinet is Empty',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.manrope(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: theme.textTheme.titleLarge?.color,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Get started by adding your medications to stay on top of your health journey.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.manrope(
-                fontSize: 16,
-                color: theme.textTheme.bodyMedium?.color,
-              ),
-            ),
-            const SizedBox(height: 40),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('Add Your First Medicine'),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => const MedicationFormScreen()),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-              ),
-            ),
-          ],
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'MedMinder',
+          style: GoogleFonts.manrope(
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+          ),
         ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_none_outlined, size: 28),
+            onPressed: () {
+              // Handle notification tap
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: _buildHeader(theme, formattedDate),
+          ),
+          Expanded(
+            child: StreamBuilder<List<Medicine>>(
+              stream: _getMedicines(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return _buildEmptyState();
+                }
+
+                final medicines = snapshot.data!;
+                return ListView.builder(
+                  itemCount: medicines.length,
+                  itemBuilder: (context, index) {
+                    final medicine = medicines[index];
+                    return MedicationTile(
+                      medicine: medicine,
+                      onEdit: () => _editMedicine(medicine),
+                      onDelete: () => _deleteMedicine(medicine.id!),
+                      onToggleTaken: () => _toggleTaken(medicine),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addMedicine,
+        icon: const Icon(Icons.add),
+        label: const Text('Add Medicine'),
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
 
-
-  SliverAppBar _buildAppBar(ThemeData theme, BuildContext context) {
-    return SliverAppBar(
-      pinned: true,
-      backgroundColor: theme.scaffoldBackgroundColor,
-      elevation: 0,
-      leadingWidth: 0,
-      title: Row(
-        children: [
-          CircleAvatar(
-            backgroundImage: (user?.photoURL != null && user!.photoURL!.isNotEmpty)
-                ? NetworkImage(user!.photoURL!)
-                : null,
-            child: (user?.photoURL == null || user!.photoURL!.isEmpty)
-                ? const Icon(Icons.person)
-                : null,
+  Widget _buildHeader(ThemeData theme, String formattedDate) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+      decoration: BoxDecoration(
+        color: theme.primaryColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: theme.primaryColor.withAlpha(50),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
-          const SizedBox(width: 12),
-          Column(
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Your Meds Schedule',
+                    style: GoogleFonts.manrope(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    formattedDate,
+                    style: GoogleFonts.manrope(
+                      color: Colors.white.withAlpha(200),
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+              const Icon(Icons.calendar_today, color: Colors.white, size: 32),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildProgressIndicator(theme),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressIndicator(ThemeData theme) {
+    return StreamBuilder<List<Medicine>>(
+        stream: _getMedicines(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const SizedBox.shrink();
+          final medicines = snapshot.data!;
+          final takenCount = medicines.where((m) => m.isCompleted).length;
+          final totalCount = medicines.length;
+          final double progress = totalCount > 0 ? takenCount / totalCount : 0.0;
+
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Good Morning, ${user?.displayName?.split(' ').first ?? 'User'}',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                '$takenCount of $totalCount Taken',
+                style: GoogleFonts.manrope(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              Text(
-                DateFormat.yMMMMd().format(DateTime.now()),
-                style: theme.textTheme.bodySmall,
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: progress,
+                backgroundColor: Colors.white.withAlpha(70),
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                minHeight: 8,
+                borderRadius: BorderRadius.circular(4),
               ),
             ],
-          ),
-        ],
-      ),
-      actions: [
-        IconButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const OrderScreen()),
-            );
-          },
-          icon: const Icon(Icons.shopping_cart),
-          tooltip: 'Order Medicines',
-        ),
-        IconButton(
-          onPressed: () => setState(() {}), // Refreshes the stream
-          icon: const Icon(Icons.refresh),
-        ),
-      ],
-    );
+          );
+        });
   }
 
-  Widget _buildDailyProgress(ThemeData theme, double progress, int taken, int total) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Your Daily Progress', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                IconButton(
-                  onPressed: () => _shareProgress(progress),
-                  icon: Icon(Icons.share, color: theme.colorScheme.primary),
-                  tooltip: 'Share Progress',
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                SizedBox(
-                  width: 100,
-                  height: 100,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CircularProgressIndicator(
-                        value: progress,
-                        strokeWidth: 8,
-                        backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                        valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
-                      ),
-                      Center(
-                        child: Text('${(progress * 100).toInt()}%', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-                      )
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('$taken of $total medicines taken', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      Text('Stay on track! Your health is your priority.', style: theme.textTheme.bodyMedium)
-                    ],
-                  ),
-                )
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNextUp(ThemeData theme, Medicine medicine) {
-    final isOverdue = medicine.nextDose?.isBefore(DateTime.now()) ?? false;
-    return Card(
-      color: isOverdue ? AppTheme.warningLight.withAlpha(50) : theme.colorScheme.secondaryContainer.withAlpha(50),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: isOverdue ? AppTheme.warningDark : theme.colorScheme.secondary, width: 1),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Next Up', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
-                if (isOverdue)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.warningDark.withAlpha(20),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text('Overdue', style: TextStyle(fontSize: 12, color: AppTheme.warningDark, fontWeight: FontWeight.bold)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(medicine.name, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  medicine.nextDose != null ? DateFormat.jm().format(medicine.nextDose!) : 'No time set',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                      color: isOverdue ? AppTheme.warningDark : theme.colorScheme.secondary, fontWeight: FontWeight.bold),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    if (user != null && medicine.id != null) {
-                      FirestoreService.updateMedicineStatus(user!.uid, medicine.id!, true);
-                    }
-                  },
-                  icon: const Icon(Icons.check, size: 18),
-                  label: const Text('Take Now'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTipsCard(ThemeData theme) {
-    return Card(
-      color: theme.colorScheme.surfaceContainerHighest.withAlpha(150),
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            Icon(Icons.lightbulb_outline, color: theme.colorScheme.primary, size: 32),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(_currentTip, style: theme.textTheme.bodyLarge),
-            ),
-            IconButton(
-              onPressed: _changeTip,
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMedicineList(ThemeData theme, List<Medicine> medicines) {
-    final timeSections = {
-      'Morning': (5, 12),
-      'Afternoon': (12, 17),
-      'Evening': (17, 24),
-    };
-
-    final groupedMeds = <String, List<Medicine>>{};
-    for (var med in medicines) {
-      final hour = med.nextDose?.hour;
-      if (hour == null) continue;
-      for (var entry in timeSections.entries) {
-        if (hour >= entry.value.$1 && hour < entry.value.$2) {
-          (groupedMeds[entry.key] ??= []).add(med);
-          break;
-        }
-      }
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: timeSections.keys.map((title) {
-        final medsForSection = groupedMeds[title] ?? [];
-        return _buildMedicineSection(theme, title, medsForSection);
-      }).toList(),
-    );
-  }
-
-  Widget _buildMedicineSection(ThemeData theme, String title, List<Medicine> medicines) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
-          child: Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-        ),
-        if (medicines.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 32.0),
-            child: Center(
-              child: Text('No medications for this time.', style: theme.textTheme.bodyMedium),
-            ),
-          )
-        else
-          ...medicines.map((med) => _buildMedicineCard(theme, med)),
-      ],
-    );
-  }
-
-  Widget _buildMedicineCard(ThemeData theme, Medicine medicine) {
-    final bool isSkipped = !medicine.isCompleted && (medicine.nextDose?.isBefore(DateTime.now()) ?? false);
-
-    return Slidable(
-      key: ValueKey(medicine.id),
-      startActionPane: ActionPane(
-        motion: const DrawerMotion(),
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SlidableAction(
-            onPressed: (_) => _deleteMedicine(medicine),
-            backgroundColor: Colors.red,
-            foregroundColor: Colors.white,
-            icon: Icons.delete,
-            label: 'Delete',
+          Image.network(
+            'https://img.freepik.com/free-vector/no-data-concept-illustration_114360-616.jpg?t=st=1716924558~exp=1716928158~hmac=ba15486574f8812c3f8a42718e27a7407b328a3819543e5e408543c7b3e944b2&w=740',
+            height: 200,
           ),
-          SlidableAction(
-            onPressed: (_) {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => MedicationFormScreen(medicine: medicine),
-                ),
-              );
-            },
-            backgroundColor: theme.colorScheme.primary,
-            foregroundColor: Colors.white,
-            icon: Icons.edit,
-            label: 'Edit',
+          const SizedBox(height: 20),
+          Text(
+            'No medications added yet.',
+            style: GoogleFonts.manrope(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Tap the "Add Medicine" button to get started.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.manrope(fontSize: 14, color: Colors.grey[600]),
           ),
         ],
       ),
-      child: Card(
-        elevation: 1,
-        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: medicine.isCompleted
-            ? AppTheme.accentGreen.withAlpha(30)
-            : (isSkipped ? AppTheme.errorLight.withAlpha(50) : theme.cardColor),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              _buildMedicationIcon(theme, medicine, isSkipped),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(medicine.name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(
-                      medicine.isCompleted
-                          ? 'Taken at ${DateFormat.jm().format(medicine.nextDose!)}'
-                          : (isSkipped ? 'Skipped' : DateFormat.jm().format(medicine.nextDose!)),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: isSkipped ? AppTheme.errorDark : (medicine.isCompleted ? AppTheme.accentGreenDark : null),
-                        fontWeight: isSkipped || medicine.isCompleted ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (!medicine.isCompleted && !isSkipped)
-                ElevatedButton(
-                  onPressed: () {
-                    if (user != null && medicine.id != null) {
-                      FirestoreService.updateMedicineStatus(user!.uid, medicine.id!, true);
-                    }
-                  },
-                  child: const Text('Take'),
-                )
-              else if (medicine.isCompleted)
-                const Icon(Icons.check_circle, color: AppTheme.accentGreenDark)
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMedicationIcon(ThemeData theme, Medicine medicine, bool isSkipped) {
-    Color iconColor = theme.colorScheme.onPrimary;
-    Color backgroundColor = theme.colorScheme.primary;
-    IconData icon = Icons.medication;
-
-    if (medicine.isCompleted) {
-      backgroundColor = AppTheme.accentGreenDark;
-      icon = Icons.check;
-    } else if (isSkipped) {
-      backgroundColor = AppTheme.errorDark;
-      icon = Icons.close;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icon, color: iconColor),
     );
   }
 }

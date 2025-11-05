@@ -30,72 +30,70 @@ class AppTheme {
   static const Color redAdherence = Color(0xFFE74C3C);
   static const Color greyAdherence = Color(0xFFBDBDBD);
 
-
   static final TextTheme _textTheme = GoogleFonts.manropeTextTheme();
 
   static final ThemeData lightTheme = ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.light,
-    primaryColor: primaryLight,
-    scaffoldBackgroundColor: backgroundLight,
-    cardColor: cardLight,
-    hintColor: accentLight,
-    textTheme: _textTheme.apply(bodyColor: textLight, displayColor: textLight),
-    colorScheme: const ColorScheme.light(
-      primary: primaryLight,
-      secondary: accentLight,
-      error: errorLight,
-      surface: cardLight,
-      onPrimary: Colors.white,
-      onSecondary: Colors.black,
-      onSurface: textLight,
-      onError: Colors.white,
+      useMaterial3: true,
       brightness: Brightness.light,
-    ),
-    appBarTheme: AppBarTheme(
-      backgroundColor: backgroundLight,
-      elevation: 0,
-      iconTheme: const IconThemeData(color: primaryLight),
-      titleTextStyle: _textTheme.titleLarge?.copyWith(color: textLight, fontWeight: FontWeight.bold),
-    ),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          foregroundColor: Colors.white,
-          backgroundColor: primaryLight,
-        )
-    )
-  );
+      primaryColor: primaryLight,
+      scaffoldBackgroundColor: backgroundLight,
+      cardColor: cardLight,
+      hintColor: accentLight,
+      textTheme:
+          _textTheme.apply(bodyColor: textLight, displayColor: textLight),
+      colorScheme: const ColorScheme.light(
+        primary: primaryLight,
+        secondary: accentLight,
+        error: errorLight,
+        surface: cardLight,
+        onPrimary: Colors.white,
+        onSecondary: Colors.black,
+        onSurface: textLight,
+        onError: Colors.white,
+        brightness: Brightness.light,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: backgroundLight,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: primaryLight),
+        titleTextStyle: _textTheme.titleLarge
+            ?.copyWith(color: textLight, fontWeight: FontWeight.bold),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+        foregroundColor: Colors.white,
+        backgroundColor: primaryLight,
+      )));
 
   static final ThemeData darkTheme = ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.dark,
-    primaryColor: primaryDark,
-    scaffoldBackgroundColor: backgroundDark,
-    cardColor: cardDark,
-    hintColor: accentDark,
-    textTheme: _textTheme.apply(bodyColor: textDark, displayColor: textDark),
-    colorScheme: const ColorScheme.dark(
-      primary: primaryDark,
-      secondary: accentDark,
-      error: errorDark,
-      surface: cardDark,
-      onPrimary: Colors.white,
-      onSecondary: Colors.black,
-      onSurface: textDark,
-      onError: Colors.white,
+      useMaterial3: true,
       brightness: Brightness.dark,
-    ),
+      primaryColor: primaryDark,
+      scaffoldBackgroundColor: backgroundDark,
+      cardColor: cardDark,
+      hintColor: accentDark,
+      textTheme: _textTheme.apply(bodyColor: textDark, displayColor: textDark),
+      colorScheme: const ColorScheme.dark(
+        primary: primaryDark,
+        secondary: accentDark,
+        error: errorDark,
+        surface: cardDark,
+        onPrimary: Colors.white,
+        onSecondary: Colors.black,
+        onSurface: textDark,
+        onError: Colors.white,
+        brightness: Brightness.dark,
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: backgroundDark,
         elevation: 0,
         iconTheme: const IconThemeData(color: primaryDark),
-        titleTextStyle: _textTheme.titleLarge?.copyWith(color: textDark, fontWeight: FontWeight.bold),
+        titleTextStyle: _textTheme.titleLarge
+            ?.copyWith(color: textDark, fontWeight: FontWeight.bold),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            foregroundColor: Colors.white,
-            backgroundColor: primaryDark,
-          )
-      )
-  );
+        foregroundColor: Colors.white,
+        backgroundColor: primaryDark,
+      )));
 }

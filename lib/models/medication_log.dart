@@ -15,8 +15,9 @@ class MedicationLog {
     required this.timestamp,
   });
 
-  factory MedicationLog.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+  factory MedicationLog.fromFirestore(
+      DocumentSnapshot<Map<String, dynamic>> doc) {
+    Map<String, dynamic> data = doc.data()!;
     return MedicationLog(
       id: doc.id,
       medicineName: data['medicineName'] ?? '',

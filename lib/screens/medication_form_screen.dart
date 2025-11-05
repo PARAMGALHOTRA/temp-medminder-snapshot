@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:medminder/models/medicine.dart';
 import 'package:medminder/services/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:medminder/services/notification_settings_service.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class MedicationFormScreen extends StatefulWidget {
   final Medicine? medicine;
@@ -20,7 +20,14 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late String _name;
   late String _dosage;
+  late String _frequencyType;
+  late List<String> _specificDays;
   late TimeOfDay _time;
+  late DateTime _startDate;
+  late int _durationInDays;
+  late int _inventory;
+  late int _refillReminderThreshold;
+
   bool _isLoading = false;
   late NotificationSettingsService _notificationSettingsService;
 
@@ -31,11 +38,28 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
     if (user != null) {
       _notificationSettingsService = NotificationSettingsService(user.uid);
     }
-    _name = widget.medicine?.name ?? '';
-    _dosage = widget.medicine?.dosage ?? '';
-    _time = widget.medicine?.nextDose != null
-        ? TimeOfDay.fromDateTime(widget.medicine!.nextDose!)
-        : const TimeOfDay(hour: 9, minute: 0);
+
+    if (widget.medicine != null) {
+      _name = widget.medicine!.name;
+      _dosage = widget.medicine!.dosage;
+      _frequencyType = widget.medicine!.frequencyType;
+      _specificDays = widget.medicine!.specificDays;
+      _time = widget.medicine!.time;
+      _startDate = widget.medicine!.startDate;
+      _durationInDays = widget.medicine!.durationInDays;
+      _inventory = widget.medicine!.inventory;
+      _refillReminderThreshold = widget.medicine!.refillReminderThreshold;
+    } else {
+      _name = '';
+      _dosage = '';
+      _frequencyType = 'daily';
+      _specificDays = [];
+      _time = const TimeOfDay(hour: 9, minute: 0);
+      _startDate = DateTime.now();
+      _durationInDays = 0;
+      _inventory = 0;
+      _refillReminderThreshold = 0;
+    }
   }
 
   Future<void> _selectTime() async {
@@ -47,6 +71,30 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
     }
   }
 
+  Future<void> _selectDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null && picked != _startDate) {
+      setState(() {
+        _startDate = picked;
+      });
+    }
+  }
+
+  void _toggleDay(String day) {
+    setState(() {
+      if (_specificDays.contains(day)) {
+        _specificDays.remove(day);
+      } else {
+        _specificDays.add(day);
+      }
+    });
+  }
+
   Future<void> _submit() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
@@ -55,17 +103,28 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
       });
 
       final now = DateTime.now();
-      var nextDose =
-          DateTime(now.year, now.month, now.day, _time.hour, _time.minute);
-      if (nextDose.isBefore(now)) {
-        nextDose = nextDose.add(const Duration(days: 1));
-      }
+      final nextDose = DateTime(
+        _startDate.year,
+        _startDate.month,
+        _startDate.day,
+        _time.hour,
+        _time.minute,
+      );
 
       final medicine = Medicine(
         id: widget.medicine?.id,
         name: _name,
         dosage: _dosage,
-        nextDose: nextDose,
+        frequencyType: _frequencyType,
+        specificDays: _specificDays,
+        time: _time,
+        startDate: _startDate,
+        durationInDays: _durationInDays,
+        inventory: _inventory,
+        refillReminderThreshold: _refillReminderThreshold,
+        nextDose: nextDose.isBefore(now)
+            ? nextDose.add(const Duration(days: 1))
+            : nextDose,
         isCompleted: widget.medicine?.isCompleted ?? false,
       );
 
@@ -87,17 +146,18 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
               .doc(medicine.id)
               .update(medicine.toMap());
 
-          // Cancel the old notification
-          await NotificationService().cancelNotification(widget.medicine.hashCode);
+          await NotificationService()
+              .cancelNotification(widget.medicine.hashCode);
         }
 
-        final bool notificationsEnabled = await _notificationSettingsService.getNotificationsEnabled();
+        final bool notificationsEnabled =
+            await _notificationSettingsService.getNotificationsEnabled();
         if (notificationsEnabled) {
           await NotificationService().scheduleNotification(
             medicine.hashCode,
             'Time for your medication',
             'It\'s time to take your $_name',
-            nextDose,
+            medicine.nextDose,
           );
         }
 
@@ -113,8 +173,8 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to save. Please try again.'),
+            SnackBar(
+              content: Text('Failed to save: $e'),
               backgroundColor: Colors.red,
             ),
           );
@@ -131,48 +191,84 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.medicine == null ? 'Add Medicine' : 'Edit Medicine',
+            style: GoogleFonts.manrope(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        elevation: 0,
+      ),
       body: Stack(
         children: [
-          Column(
-            children: [
-              _buildHeader(theme),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildTextField(
-                          label: 'Medicine Name',
-                          icon: Icons.medical_services,
-                          placeholder: 'e.g., Paracetamol',
-                          initialValue: _name,
-                          validator: (value) =>
-                              value!.isEmpty ? 'Please enter a name' : null,
-                          onSaved: (value) => _name = value!,
-                        ),
-                        const SizedBox(height: 24),
-                        _buildTextField(
-                          label: 'Dosage',
-                          icon: Icons.scale,
-                          placeholder: 'e.g., 500mg or 1 tablet',
-                          initialValue: _dosage,
-                          validator: (value) =>
-                              value!.isEmpty ? 'Please enter a dosage' : null,
-                          onSaved: (value) => _dosage = value!,
-                        ),
-                        const SizedBox(height: 24),
-                        _buildTimePicker(theme),
-                        const SizedBox(height: 32),
-                        _buildActionButtons(),
-                      ],
-                    ),
+          Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle('Medicine Details', theme),
+                  _buildTextField(
+                    initialValue: _name,
+                    label: 'Medicine Name',
+                    icon: Icons.medication,
+                    onSaved: (value) => _name = value!,
                   ),
-                ),
+                  _buildTextField(
+                    initialValue: _dosage,
+                    label: 'Dosage (e.g., 2 pills, 10ml)',
+                    icon: Icons.science,
+                    onSaved: (value) => _dosage = value!,
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Frequency', theme),
+                  _buildFrequencySelector(theme),
+                  if (_frequencyType == 'specific_days')
+                    _buildDaySelector(theme),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Schedule', theme),
+                  _buildTimeSelector('Time', _time, _selectTime, theme),
+                  _buildTimeSelector(
+                      'Start Date', _startDate, _selectDate, theme),
+                  _buildTextField(
+                    initialValue: _durationInDays.toString(),
+                    label: 'Duration in Days (0 for ongoing)',
+                    icon: Icons.date_range,
+                    keyboardType: TextInputType.number,
+                    onSaved: (value) =>
+                        _durationInDays = int.tryParse(value!) ?? 0,
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Inventory & Refills', theme),
+                  _buildTextField(
+                    initialValue: _inventory.toString(),
+                    label: 'Pill Count in Inventory',
+                    icon: Icons.inventory,
+                    keyboardType: TextInputType.number,
+                    onSaved: (value) => _inventory = int.tryParse(value!) ?? 0,
+                  ),
+                  _buildTextField(
+                    initialValue: _refillReminderThreshold.toString(),
+                    label: 'Refill Reminder at (count)',
+                    icon: Icons.notifications_active,
+                    keyboardType: TextInputType.number,
+                    onSaved: (value) =>
+                        _refillReminderThreshold = int.tryParse(value!) ?? 0,
+                  ),
+                  const SizedBox(height: 40),
+                  ElevatedButton(
+                    onPressed: _submit,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 56),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text('Save Medicine',
+                        style: GoogleFonts.manrope(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
           if (_isLoading)
             Container(
@@ -186,160 +282,118 @@ class _MedicationFormScreenState extends State<MedicationFormScreen> {
     );
   }
 
-  Widget _buildHeader(ThemeData theme) {
-    return Container(
-      height: 120,
-      padding: const EdgeInsets.only(bottom: 16, left: 16, right: 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            theme.colorScheme.primary,
-            const Color(0xFF357ABD), // primary-darker
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  Widget _buildSectionTitle(String title, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Text(
+        title,
+        style: GoogleFonts.manrope(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: theme.textTheme.titleLarge?.color,
         ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-          ),
-          Text(
-            'Add Medicine',
-            style: GoogleFonts.manrope(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(width: 48), // For spacing
-        ],
       ),
     );
   }
 
   Widget _buildTextField({
+    required String initialValue,
     required String label,
     required IconData icon,
-    required String placeholder,
-    required String initialValue,
-    required FormFieldValidator<String> validator,
     required FormFieldSetter<String> onSaved,
+    TextInputType keyboardType = TextInputType.text,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w500),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: TextFormField(
+        initialValue: initialValue,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        const SizedBox(height: 8),
-        TextFormField(
-          initialValue: initialValue,
-          validator: validator,
-          onSaved: onSaved,
-          decoration: InputDecoration(
-            hintText: placeholder,
-            prefixIcon: Icon(icon),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
-            ),
-          ),
-        ),
-      ],
+        keyboardType: keyboardType,
+        validator: (value) => value!.isEmpty ? 'Please enter a value' : null,
+        onSaved: onSaved,
+      ),
     );
   }
 
-  Widget _buildTimePicker(ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Set Reminder Time',
-          style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w500),
+  Widget _buildFrequencySelector(ThemeData theme) {
+    return SegmentedButton<String>(
+      style: SegmentedButton.styleFrom(
+        fixedSize: const Size.fromHeight(48),
+      ),
+      segments: const [
+        ButtonSegment(
+          value: 'daily',
+          label: Text('Daily'),
         ),
-        const SizedBox(height: 8),
-        GestureDetector(
-          onTap: _selectTime,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade400),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withAlpha(26),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.schedule, color: theme.colorScheme.primary),
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      DateFormat.jm().format(DateTime(2023, 1, 1, _time.hour, _time.minute)),
-                      style: GoogleFonts.manrope(fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-                const Icon(Icons.edit, color: Colors.grey),
-              ],
-            ),
-          ),
-        ),
+        ButtonSegment(value: 'specific_days', label: Text('Specific Days')),
+        ButtonSegment(value: 'as_needed', label: Text('As Needed')),
       ],
+      selected: {_frequencyType},
+      onSelectionChanged: (newSelection) {
+        setState(() {
+          _frequencyType = newSelection.first;
+        });
+      },
     );
   }
 
-  Widget _buildActionButtons() {
-    return Column(
-      children: [
-        ElevatedButton.icon(
-          onPressed: _submit,
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 56),
+  Widget _buildDaySelector(ThemeData theme) {
+    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return Padding(
+      padding: const EdgeInsets.only(top: 16.0),
+      child: Wrap(
+        spacing: 8.0,
+        runSpacing: 8.0,
+        children: days.map((day) {
+          final isSelected = _specificDays.contains(day);
+          return FilterChip(
+            label: Text(day),
+            selected: isSelected,
+            onSelected: (selected) => _toggleDay(day),
+            showCheckmark: false,
+            selectedColor: theme.colorScheme.primary,
+            labelStyle: TextStyle(
+                color: isSelected
+                    ? Colors.white
+                    : theme.textTheme.bodyLarge?.color),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(30),
-            ),
-            elevation: 5,
-            shadowColor: Theme.of(context).colorScheme.primary.withAlpha(77),
-          ),
-          icon: const Icon(Icons.check_circle, color: Colors.white),
-          label: Text(
-            'Save Medicine',
-            style: GoogleFonts.manrope(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        if (widget.medicine != null)
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.manrope(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(
+                color: isSelected ? theme.colorScheme.primary : Colors.grey,
               ),
             ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildTimeSelector(
+      String label, dynamic value, VoidCallback onTap, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            prefixIcon: Icon(
+                label == 'Time' ? Icons.access_time : Icons.calendar_today),
           ),
-      ],
+          child: Text(
+            value is TimeOfDay
+                ? value.format(context)
+                : DateFormat.yMMMd().format(value),
+            style: GoogleFonts.manrope(fontSize: 16),
+          ),
+        ),
+      ),
     );
   }
 }

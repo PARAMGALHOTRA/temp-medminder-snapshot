@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:medminder/models/medicine.dart';
-import 'package:medminder/screens/medication_form_screen.dart';
-import 'package:medminder/services/firestore_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
+import 'package:medminder/models/order.dart' as my_order;
+import 'package:share/share.dart';
 
 class OrderScreen extends StatefulWidget {
   const OrderScreen({super.key});
@@ -14,329 +14,166 @@ class OrderScreen extends StatefulWidget {
 }
 
 class _OrderScreenState extends State<OrderScreen> {
-  void _launchURL(String url) async {
-    final Uri uri = Uri.parse(url);
-    if (!await launchUrl(uri)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not launch $url')),
-        );
-      }
-    }
+  final user = FirebaseAuth.instance.currentUser;
+
+  Stream<List<my_order.Order>> _getOrders() {
+    if (user == null) return Stream.value([]);
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(user!.uid)
+        .collection('orders')
+        .orderBy('orderDate', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => my_order.Order.fromMap(doc.data(), doc.id))
+            .toList());
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final user = FirebaseAuth.instance.currentUser;
-
     return Scaffold(
       appBar: AppBar(
-        elevation: 1,
+        title: Text('Your Orders', style: GoogleFonts.manrope(fontWeight: FontWeight.bold)),
         centerTitle: true,
-        title: Text(
-          'Order Medicines',
-          style: GoogleFonts.manrope(
-              fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            }
-          },
-          color: theme.colorScheme.onSurface,
-        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: StreamBuilder<List<Medicine>>(
-            stream: FirestoreService.getMedicinesStream(user?.uid),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              }
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return _buildEmptyState(theme);
-              }
+      body: StreamBuilder<List<my_order.Order>>(
+        stream: _getOrders(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return _buildEmptyState();
+          }
 
-              final medicines = snapshot.data!;
-              final medicationNames =
-                  medicines.map((m) => '${m.name} ${m.dosage}').join(', ');
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildCurrentMedicationsCard(
-                      theme, medicationNames),
-                  const SizedBox(height: 24),
-                  _buildRefillReminderCard(theme),
-                  const SizedBox(height: 24),
-                  _buildPharmacyList(theme),
-                ],
-              );
-            }),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 48.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.medication_liquid,
-            size: 100,
-            color: Colors.grey,
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Your Medicine Cabinet is Empty',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.manrope(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Add your medicines to easily track and reorder them.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.manrope(
-              fontSize: 16,
-              color: theme.colorScheme.onSurface.withAlpha(153),
-            ),
-          ),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const MedicationFormScreen()),
-              );
+          final orders = snapshot.data!;
+          return ListView.builder(
+            itemCount: orders.length,
+            itemBuilder: (context, index) {
+              final order = orders[index];
+              return _buildOrderCard(order);
             },
-            icon: const Icon(Icons.add, color: Colors.white),
-            label: Text(
-              'Add Your First Medicine',
-              style: GoogleFonts.manrope(
-                  color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.primary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildCurrentMedicationsCard(
-      ThemeData theme, String medications) {
+  Widget _buildOrderCard(my_order.Order order) {
+    final theme = Theme.of(context);
+
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      elevation: 4,
+      shadowColor: Colors.black.withAlpha(25),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Your Current Medications',
-              style: GoogleFonts.manrope(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Order #${order.id.substring(0, 6)}...',
+                  style: GoogleFonts.manrope(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(order.status).withAlpha(25),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    order.status,
+                    style: GoogleFonts.manrope(color: _getStatusColor(order.status), fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             Text(
-              medications,
-              style: GoogleFonts.manrope(
-                  fontSize: 16, color: theme.colorScheme.onSurface.withAlpha(153)),
+              'Placed on: ${DateFormat.yMMMd().format(order.orderDate)}',
+              style: GoogleFonts.manrope(color: Colors.grey[600]),
+            ),
+            const Divider(height: 24),
+            ...order.items.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(item['name'], style: GoogleFonts.manrope(fontSize: 16)),
+                      Text('x${item['quantity']}',
+                          style: GoogleFonts.manrope(color: Colors.grey[700])),
+                    ],
+                  ),
+                )),
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Total', style: GoogleFonts.manrope(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text('\$${order.totalPrice.toStringAsFixed(2)}', style: GoogleFonts.manrope(fontSize: 18, fontWeight: FontWeight.bold, color: theme.primaryColor)),
+              ],
             ),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.share, color: Colors.white),
-              label: Text('Share List',
-                  style: GoogleFonts.manrope(color: Colors.white)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                TextButton.icon(
+                  onPressed: () {
+                    Share.share('Check out my order: ${order.id}');
+                  },
+                  icon: const Icon(Icons.share, size: 20),
+                  label: const Text('Share'),
+                ),
+                TextButton.icon(
+                  onPressed: () { /* Navigate to tracking page */ },
+                  icon: const Icon(Icons.track_changes, size: 20),
+                  label: const Text('Track'),
+                ),
+              ],
+            )
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRefillReminderCard(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withAlpha(26),
-        borderRadius: BorderRadius.circular(12),
-      ),
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'processing':
+        return Colors.orange;
+      case 'shipped':
+        return Colors.blue;
+      case 'delivered':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.notifications_active, color: theme.colorScheme.primary, size: 32),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Never Miss a Refill',
-                      style: GoogleFonts.manrope(
-                          fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Set custom reminders to get notified before you run out of any medicine.',
-                      style: GoogleFonts.manrope(
-                          color: theme.colorScheme.onSurface.withAlpha(153), fontSize: 14),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Image.network(
+            'https://img.freepik.com/free-vector/no-data-concept-illustration_114360-616.jpg?t=st=1716924558~exp=171692t=st=1716924558~exp=1716928158~hmac=ba15486574f8812c3f8a42718e27a7407b328a3819543e5e408543c7b3e944b2&w=740',
+            height: 200,
           ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.edit_calendar, color: Colors.white, size: 20),
-            label: Text('Set Custom Reminders',
-                style: GoogleFonts.manrope(color: Colors.white)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.primary,
-              minimumSize: const Size(double.infinity, 44),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
+          const SizedBox(height: 20),
+          Text(
+            'You have no orders yet.',
+            style: GoogleFonts.manrope(fontSize: 18, fontWeight: FontWeight.w600),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPharmacyList(ThemeData theme) {
-    final pharmacies = [
-      {
-        'name': 'Apollo Pharmacy',
-        'phone': '+91 12345 67890',
-        'logo':
-            'https://lh3.googleusercontent.com/aida-public/AB6AXuCgzX3vPt8haLA-lQtwbqLQJE81Lbk_82Fn0YlsqD85fFG_NNiL3f0sBkkQ2wrJLaBTv_AydMxkf89jtiB3AC0R4EPL1QInWtTbD58Xkcmim7B7fRqsvdZg-NwlBspkBJqdweyV6sofx50C4KfNcK7wiqFqgW8xPK31L3W6be8MUFYAIEuYzS5xhCTtJKX-srBwqWtbPbqwJx0MR2e7ZPssnL3exO7VomAZRl1s2fUhwKFABUWprM_Uz14wn-Qp_SviLwzTe779SuLl'
-      },
-      {
-        'name': 'MedPlus',
-        'phone': '+91 98765 43210',
-        'logo':
-            'https://lh3.googleusercontent.com/aida-public/AB6AXuB81jHO56EkLybDtzAO7h0KhFTIuILE9Q_p77Q8Xz5heX4QzgdpXaVxUg7Q3hW952uCuEWezfivjYVhpAvEmKZVCOQJMQ1L2IbNc2MKdP__sr4sPSCbVTMtcXexw9JMnWnieSa8ai7e6KhxWKAnTgObcpBKw6FUr4kTmQnjL3HQJYLBF-T2Sbzm5xpXkEIkfLmAxuEtGswndK61PmGjLghq9B2zRtHLoOe287UW1wu-zsEnvsK48-hYTV6Bi2ufmN7gnIYZX_IyUXmR'
-      },
-      {
-        'name': 'Netmeds',
-        'phone': '+91 87654 32109',
-        'logo':
-            'https://lh3.googleusercontent.com/aida-public/AB6AXuBPEdpII8ekV_pjV8bej957AqY_8TjSWAOLsk1qxepv0EGEFfSsoQAgc9ug7eixKSAMe2YyDJUkIoDU4E0vvoPoXsZbqVmIRFFBIQ2LROoZmp6i-Kw9aTCChvnOhdG-QlI0kF2BzbHUpYwJB-glpW_A7hopwJFFEO2GoPVTKrsFm6whBbPjyYw117d9giWU-1o8T_O8-58PYchxM3VRBlvfw6tGtX2iOlJKIzgmJ5Q4xjBKl7j5WkXqPCVlXx7WSKwkU68dw3OKMR6f-'
-      },
-      {
-        'name': '1mg',
-        'phone': '+91 76543 21098',
-        'logo':
-            'https://lh3.googleusercontent.com/aida-public/AB6AXuAd3pCX7yOP_qMtEyctl6L_iT86_zipvmOO8XWj73aG8u64FXUWAn9rSgQ-1K-y-V5FMCFRHYsfl08jjAovFcf8LJUU8zfB2A6nbfHYWKov8DnbZsO089y3fmDCW8L3Hq94-NCWKRDUwbzn78V2gKiVXu05ygVtCpYuMpdBLlDxdIBQVnDO6YI1wzWC5NHj0XrhkdmsCktu-lbORl7cqtz29NLCaB_PY8fqNVECtw3rCupqFX_Kz9nj-KZG3jJVNi2P0SEVHLvjzJGr'
-      }
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8.0),
-          child: Text(
-            'Contact a Pharmacy',
-            style: GoogleFonts.manrope(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface),
-          ),
-        ),
-        ...pharmacies.map((pharmacy) =>
-            _buildPharmacyItem(pharmacy, theme)),
-      ],
-    );
-  }
-
-  Widget _buildPharmacyItem(
-      Map<String, String> pharmacy, ThemeData theme) {
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                image: DecorationImage(
-                  image: NetworkImage(pharmacy['logo']!),
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    pharmacy['name']!,
-                    style: GoogleFonts.manrope(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: theme.colorScheme.onSurface),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    pharmacy['phone']!,
-                    style: GoogleFonts.manrope(
-                        fontSize: 14, color: theme.colorScheme.onSurface.withAlpha(153)),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: () => _launchURL('tel:${pharmacy['phone']}'),
-              icon: Icon(Icons.call, color: theme.colorScheme.primary),
-            ),
-            IconButton(
-              onPressed: () => _launchURL(
-                  'https://www.google.com/search?q=${pharmacy['name']}'),
-              icon: Icon(Icons.language, color: theme.colorScheme.primary),
-            ),
-          ],
-        ),
       ),
     );
   }

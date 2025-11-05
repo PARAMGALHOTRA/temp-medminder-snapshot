@@ -6,9 +6,9 @@ class MedMinderLogo extends StatelessWidget {
   final double fontSize;
   const MedMinderLogo({
     super.key,
-  this.width = 220,
+    this.width = 220,
     this.height = 56,
-  this.fontSize = 20,
+    this.fontSize = 20,
   });
 
   @override

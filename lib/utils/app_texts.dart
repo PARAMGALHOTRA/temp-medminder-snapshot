@@ -1,10 +1,10 @@
-
 import 'dart:math';
 
 class AppTexts {
   // General
   static const String appName = 'MedMinder';
-  static const String featureNotImplemented = 'This feature is not yet implemented.';
+  static const String featureNotImplemented =
+      'This feature is not yet implemented.';
   static const String notSet = 'Not Set';
 
   // Auth Screen
@@ -17,7 +17,8 @@ class AppTexts {
   static const String signupButtonLabel = 'Sign Up';
   static const String authFailedError = 'Authentication Failed';
   static const String invalidEmailError = 'Please enter a valid email';
-  static const String passwordLengthError = 'Password must be at least 6 characters';
+  static const String passwordLengthError =
+      'Password must be at least 6 characters';
 
   // User Details Screen
   static const String userDetailsTitle = 'Complete Your Profile';
@@ -28,7 +29,8 @@ class AppTexts {
 
   // Home Screen
   static const String homeScreenTitle = 'Your Medication Schedule';
-  static const String noMedicationsMessage = 'You have no medications scheduled.';
+  static const String noMedicationsMessage =
+      'You have no medications scheduled.';
   static const String addMedicationPrompt = 'Add a new one below!';
   static const String dailyTip = 'Daily Tip';
   static const String markAsTakenButton = 'Mark as Taken';

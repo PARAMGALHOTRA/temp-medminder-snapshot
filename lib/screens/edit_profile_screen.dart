@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:medminder/services/firestore_service.dart';
@@ -23,7 +24,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _updateProfile() async {
     if (_formKey.currentState!.validate() && user != null) {
       await user!.updateDisplayName(_nameController.text);
-      await FirestoreService.updateUserData(user!.uid, {'name': _nameController.text});
+      await FirestoreService.updateUserData(
+          user!.uid, {'name': _nameController.text});
+      await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) {
         Navigator.pop(context);
       }

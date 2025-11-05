@@ -12,8 +12,9 @@ class FirestoreService {
         .doc(userId)
         .collection('medicines')
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => Medicine.fromMap(doc.data(), doc.id)).toList());
+        .map((snapshot) => snapshot.docs
+            .map((doc) => Medicine.fromMap(doc.data(), doc.id))
+            .toList());
   }
 
   static Stream<List<MedicationLog>> getMedicationLogStream(String? userId) {
@@ -24,12 +25,20 @@ class FirestoreService {
         .collection('medication_logs')
         .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => MedicationLog.fromFirestore(doc)).toList());
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MedicationLog.fromFirestore(
+                doc as DocumentSnapshot<Map<String, dynamic>>))
+            .toList());
   }
 
-  static Future<void> _logMedicationEvent(String userId, String medicineId, String status) async {
-    final medDoc = await _db.collection('users').doc(userId).collection('medicines').doc(medicineId).get();
+  static Future<void> _logMedicationEvent(
+      String userId, String medicineId, String status) async {
+    final medDoc = await _db
+        .collection('users')
+        .doc(userId)
+        .collection('medicines')
+        .doc(medicineId)
+        .get();
     if (medDoc.exists) {
       final medicine = Medicine.fromMap(medDoc.data()!, medDoc.id);
       final log = MedicationLog(
@@ -38,7 +47,11 @@ class FirestoreService {
         status: status,
         timestamp: DateTime.now(),
       );
-      await _db.collection('users').doc(userId).collection('medication_logs').add(log.toFirestore());
+      await _db
+          .collection('users')
+          .doc(userId)
+          .collection('medication_logs')
+          .add(log.toFirestore());
     }
   }
 
@@ -66,25 +79,34 @@ class FirestoreService {
 
     final batch = _db.batch();
     for (final doc in querySnapshot.docs) {
-        final medicine = Medicine.fromMap(doc.data(), doc.id);
-        if (medicine.nextDose != null && medicine.nextDose!.isBefore(DateTime.now())) {
-            final log = MedicationLog(
-                medicineName: medicine.name,
-                dosage: medicine.dosage,
-                status: 'Skipped',
-                timestamp: medicine.nextDose!,
-            );
-            final logRef = _db.collection('users').doc(userId).collection('medication_logs').doc();
-            batch.set(logRef, log.toFirestore());
+      final medicine = Medicine.fromMap(doc.data(), doc.id);
+      if (medicine.nextDose.isBefore(DateTime.now())) {
+        final log = MedicationLog(
+          medicineName: medicine.name,
+          dosage: medicine.dosage,
+          status: 'Skipped',
+          timestamp: medicine.nextDose,
+        );
+        final logRef = _db
+            .collection('users')
+            .doc(userId)
+            .collection('medication_logs')
+            .doc();
+        batch.set(logRef, log.toFirestore());
 
-            // Also update the medicine to prevent re-logging
-            final medRef = _db.collection('users').doc(userId).collection('medicines').doc(doc.id);
-            batch.update(medRef, {'isCompleted': true}); // Or another flag to indicate it's been processed
-        }
+        // Also update the medicine to prevent re-logging
+        final medRef = _db
+            .collection('users')
+            .doc(userId)
+            .collection('medicines')
+            .doc(doc.id);
+        batch.update(medRef, {
+          'isCompleted': true
+        }); // Or another flag to indicate it's been processed
+      }
     }
     await batch.commit();
   }
-
 
   static Future<void> addMedicine(String userId, Medicine medicine) {
     return _db
@@ -103,20 +125,26 @@ class FirestoreService {
         .delete();
   }
 
-  static Future<DocumentSnapshot> getUserData(String userId) {
+  static Future<DocumentSnapshot<Map<String, dynamic>>> getUserData(
+      String userId) {
     return _db.collection('users').doc(userId).get();
   }
 
   static Future<void> updateUserData(String userId, Map<String, dynamic> data) {
-    return _db.collection('users').doc(userId).set(data, SetOptions(merge: true));
+    return _db
+        .collection('users')
+        .doc(userId)
+        .set(data, SetOptions(merge: true));
   }
 
-  static Future<Map<String, dynamic>?> getEmergencyContact(String userId) async {
+  static Future<Map<String, dynamic>?> getEmergencyContact(
+      String userId) async {
     final doc = await _db.collection('users').doc(userId).get();
     return doc.data()?['emergency_contact'];
   }
 
-  static Future<void> saveEmergencyContact(String userId, Map<String, dynamic> contact) {
+  static Future<void> saveEmergencyContact(
+      String userId, Map<String, dynamic> contact) {
     return _db.collection('users').doc(userId).set({
       'emergency_contact': contact,
     }, SetOptions(merge: true));
@@ -127,7 +155,8 @@ class FirestoreService {
     return doc.data()?['my_doctor'];
   }
 
-  static Future<void> saveDoctorInfo(String userId, Map<String, dynamic> doctor) {
+  static Future<void> saveDoctorInfo(
+      String userId, Map<String, dynamic> doctor) {
     return _db.collection('users').doc(userId).set({
       'my_doctor': doctor,
     }, SetOptions(merge: true));

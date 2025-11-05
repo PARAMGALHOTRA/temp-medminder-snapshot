@@ -45,8 +45,8 @@ class DailyResetService {
         now.year,
         now.month,
         now.day,
-        medicine.nextDose!.hour,
-        medicine.nextDose!.minute,
+        medicine.nextDose.hour,
+        medicine.nextDose.minute,
       );
 
       if (nextDose.isBefore(now)) {
