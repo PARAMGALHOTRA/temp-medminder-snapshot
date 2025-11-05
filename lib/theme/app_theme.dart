@@ -24,6 +24,13 @@ class AppTheme {
   static const Color accentGreen = Color(0xFFB9F6CA);
   static const Color accentGreenDark = Color(0xFF00C853);
 
+  // Adherence Colors
+  static const Color greenAdherence = Color(0xFF2ECC71);
+  static const Color orangeAdherence = Color(0xFFF39C12);
+  static const Color redAdherence = Color(0xFFE74C3C);
+  static const Color greyAdherence = Color(0xFFBDBDBD);
+
+
   static final TextTheme _textTheme = GoogleFonts.manropeTextTheme();
 
   static final ThemeData lightTheme = ThemeData(

@@ -1,9 +1,12 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:medminder/providers/theme_provider.dart';
+import 'package:medminder/screens/auth_screen.dart';
+import 'package:medminder/screens/edit_profile_screen.dart';
+import 'package:medminder/screens/emergency_contact_screen.dart';
+import 'package:medminder/screens/my_doctor_screen.dart';
 import 'package:medminder/services/firestore_service.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -16,315 +19,371 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final user = FirebaseAuth.instance.currentUser;
-  String? _appVersion;
+  bool _notificationsEnabled = true;
 
-  final _emergencyContactController = TextEditingController();
-  final _doctorNameController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _getAppVersion();
-    _loadUserData();
-  }
-
-  Future<void> _getAppVersion() async {
-    final packageInfo = await PackageInfo.fromPlatform();
-    setState(() {
-      _appVersion = packageInfo.version;
-    });
-  }
-
-  Future<void> _loadUserData() async {
-    if (user == null) return;
-    final userDoc = await FirestoreService.getUserData(user!.uid);
-    if (userDoc.exists) {
-      final userData = userDoc.data() as Map<String, dynamic>?;
-      if (userData != null) {
-        setState(() {
-          _emergencyContactController.text = userData['emergencyContact'] ?? '';
-          _doctorNameController.text = userData['doctorName'] ?? '';
-        });
-      }
+  Future<void> _logout() async {
+    await FirebaseAuth.instance.signOut();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const AuthScreen()),
+        (Route<dynamic> route) => false,
+      );
     }
   }
 
-  Future<void> _saveUserData() async {
-    if (user == null) return;
-    final data = {
-      'emergencyContact': _emergencyContactController.text,
-      'doctorName': _doctorNameController.text,
-    };
-    await FirestoreService.updateUserData(user!.uid, data);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully!')),
-      );
+  void _launchURL(String url) async {
+    final Uri uri = Uri.parse(url);
+    if (!await launchUrl(uri)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not launch $url')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
     final themeProvider = Provider.of<ThemeProvider>(context);
 
+    final Color background = isDarkMode ? const Color(0xFF161022) : const Color(0xFFF8F9FA);
+    final Color cardColor = isDarkMode ? const Color(0xFF1E182C) : Colors.white;
+    final Color primaryText = isDarkMode ? const Color(0xFFEAE8ED) : const Color(0xFF333333);
+    final Color secondaryText = isDarkMode ? const Color(0xFFA09BA6) : const Color(0xFF757575);
+    const Color primaryColor = Color(0xFF4A90E2);
+    const Color accentGreen = Color(0xFF50C878);
+    const Color accentRed = Color(0xFFE57373);
+
     return Scaffold(
+      backgroundColor: background,
       appBar: AppBar(
-        title: const Text('Profile', style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: false,
+        title: Text(
+          'Profile',
+          style: GoogleFonts.manrope(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            color: primaryText,
+          ),
+        ),
+        backgroundColor: background,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _saveUserData,
-            tooltip: 'Save Profile',
+            icon: const Icon(Icons.more_vert),
+            onPressed: () {},
+            color: primaryText,
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      body: user == null
+          ? const Center(child: Text('No user logged in.'))
+          : FutureBuilder<Object>(
+              future: FirestoreService.getUserData(user!.uid),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError || !snapshot.hasData) {
+                  return const Center(child: Text('Error loading user data.'));
+                }
+
+                final userName = user?.displayName ?? 'Jessica Linden';
+                final userInitial = userName.isNotEmpty ? userName[0].toUpperCase() : 'J';
+
+                return ListView(
+                  padding: const EdgeInsets.all(16.0),
+                  children: [
+                    _buildProfileHeader(context, userName, userInitial, primaryColor, primaryText),
+                    const SizedBox(height: 24),
+                    _buildSection(
+                      'Settings',
+                      [
+                        _buildSettingsItem(
+                          icon: Icons.notifications,
+                          text: 'Notifications',
+                          trailing: Switch(
+                            value: _notificationsEnabled,
+                            onChanged: (value) {
+                              setState(() {
+                                _notificationsEnabled = value;
+                              });
+                            },
+                            activeThumbColor: accentGreen,
+                          ),
+                          primaryColor: primaryColor,
+                          cardColor: cardColor,
+                          primaryText: primaryText,
+                        ),
+                        _buildSettingsItem(
+                          icon: Icons.dark_mode,
+                          text: 'Dark Mode',
+                          trailing: Switch(
+                            value: themeProvider.isDarkMode,
+                            onChanged: (value) {
+                              themeProvider.toggleTheme(value);
+                            },
+                            activeThumbColor: accentGreen,
+                          ),
+                          primaryColor: primaryColor,
+                          cardColor: cardColor,
+                          primaryText: primaryText,
+                        ),
+                      ],
+                      primaryText,
+                    ),
+                    const SizedBox(height: 24),
+                    _buildSection(
+                      'Health Information',
+                      [
+                        _buildActionItem(
+                          icon: Icons.contact_emergency,
+                          text: 'Emergency Contact',
+                          trailingText: 'Add Contact',
+                          onTap: () => Navigator.push(
+                              context, MaterialPageRoute(builder: (context) => const EmergencyContactScreen())),
+                          primaryColor: accentRed,
+                          cardColor: cardColor,
+                          primaryText: primaryText,
+                          secondaryText: secondaryText,
+                        ),
+                        _buildActionItem(
+                          icon: Icons.medical_services,
+                          text: 'My Doctor',
+                          trailingText: 'Add Info',
+                          onTap: () =>
+                              Navigator.push(context, MaterialPageRoute(builder: (context) => const MyDoctorScreen())),
+                          primaryColor: primaryColor,
+                          cardColor: cardColor,
+                          primaryText: primaryText,
+                          secondaryText: secondaryText,
+                        ),
+                      ],
+                      primaryText,
+                    ),
+                    const SizedBox(height: 24),
+                    _buildSection(
+                      'About',
+                      [
+                        _buildSettingsItem(
+                          icon: Icons.info,
+                          text: 'App Version',
+                          trailing: Text(
+                            'v1.0.0',
+                            style: GoogleFonts.manrope(fontSize: 14, color: secondaryText),
+                          ),
+                          primaryColor: primaryColor,
+                          cardColor: cardColor,
+                          primaryText: primaryText,
+                        ),
+                        _buildActionItem(
+                          icon: Icons.shield,
+                          text: 'Privacy Policy',
+                          onTap: () => _launchURL('https://your-privacy-policy.com'),
+                          primaryColor: primaryColor,
+                          cardColor: cardColor,
+                          primaryText: primaryText,
+                          secondaryText: secondaryText,
+                        ),
+                        _buildActionItem(
+                          icon: Icons.help_center,
+                          text: 'Help & Support',
+                          onTap: () => _launchURL('https://your-support-page.com'),
+                          primaryColor: primaryColor,
+                          cardColor: cardColor,
+                          primaryText: primaryText,
+                          secondaryText: secondaryText,
+                        ),
+                      ],
+                      primaryText,
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: _logout,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accentRed,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: const Text('Logout'),
+                    )
+                  ],
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildProfileHeader(
+      BuildContext context, String name, String initial, Color primaryColor, Color primaryText) {
+    return Column(
+      children: [
+        Container(
+          height: 128,
+          width: 128,
+          decoration: BoxDecoration(
+            color: primaryColor.withAlpha(50),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              initial,
+              style: GoogleFonts.manrope(
+                fontSize: 50,
+                fontWeight: FontWeight.bold,
+                color: primaryColor,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        GestureDetector(
+          onTap: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfileScreen()));
+            setState(() {});
+          },
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildProfileHeader(theme),
-              const SizedBox(height: 24),
-              _buildSection(
-                title: 'Quick Actions',
-                items: [
-                  _buildProfileItem(
-                    icon: Icons.upload_file,
-                    title: 'Upload Prescription',
-                    onTap: _uploadPrescription,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              _buildSection(
-                title: 'Settings',
-                items: [
-                  _buildNotificationItem(theme, themeProvider),
-                  _buildDarkModeItem(theme, themeProvider),
-                ],
-              ),
-              const SizedBox(height: 24),
-              _buildHealthInfoSection(theme),
-              const SizedBox(height: 24),
-              _buildAboutSection(theme),
-              const SizedBox(height: 24),
-              Center(
-                child: ElevatedButton(
-                  onPressed: () async {
-                    await FirebaseAuth.instance.signOut();
-                    // Navigate to auth screen if needed
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.error),
-                  child: const Text('Logout', style: TextStyle(color: Colors.white)),
+              Text(
+                name,
+                style: GoogleFonts.manrope(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: primaryText,
                 ),
-              )
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.edit, color: primaryColor, size: 20),
             ],
           ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildProfileHeader(ThemeData theme) {
-    final displayName = user?.displayName ?? 'Jessica Linden';
-    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'J';
-
-    return Center(
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 50,
-            backgroundColor: theme.colorScheme.primary.withAlpha(50),
-            child: Text(initial, style: TextStyle(fontSize: 48, color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(displayName, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-              IconButton(
-                icon: Icon(Icons.edit, color: theme.colorScheme.primary, size: 20),
-                onPressed: () {
-                  // Handle edit name
-                },
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSection({required String title, required List<Widget> items}) {
+  Widget _buildSection(String title, List<Widget> items, Color primaryText) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        Text(
+          title,
+          style: GoogleFonts.manrope(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: primaryText,
+          ),
+        ),
         const SizedBox(height: 8),
-        Card(
-          elevation: 1,
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Column(children: items),
-        ),
+        Container(
+          decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E182C) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ]),
+          child: Column(
+            children: items,
+          ),
+        )
       ],
     );
   }
 
-  Widget _buildHealthInfoSection(ThemeData theme) {
-    return _buildSection(
-      title: 'Health Information',
-      items: [
-        _buildEditableProfileItem(
-          icon: Icons.contact_emergency,
-          title: 'Emergency Contact',
-          controller: _emergencyContactController,
-        ),
-        _buildEditableProfileItem(
-          icon: Icons.medical_services,
-          title: 'My Doctor',
-          controller: _doctorNameController,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAboutSection(ThemeData theme) {
-    return _buildSection(
-      title: 'About',
-      items: [
-        _buildProfileItem(
-          icon: Icons.info,
-          title: 'App Version',
-          trailing: Text(_appVersion ?? 'Loading...'),
-        ),
-        _buildProfileItem(
-          icon: Icons.shield,
-          title: 'Privacy Policy',
-          onTap: () => _launchURL('https://your-privacy-policy.com'),
-        ),
-        _buildProfileItem(
-          icon: Icons.help_center,
-          title: 'Help & Support',
-          onTap: () => _launchURL('https://your-support-page.com'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProfileItem({
-    required IconData icon,
-    required String title,
-    Widget? trailing,
-    VoidCallback? onTap,
-  }) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withAlpha(25),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, color: Theme.of(context).colorScheme.primary),
-      ),
-      title: Text(title),
-      trailing: trailing ?? const Icon(Icons.chevron_right),
-      onTap: onTap,
-    );
-  }
-
-  Widget _buildEditableProfileItem({
-    required IconData icon,
-    required String title,
-    required TextEditingController controller,
-  }) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withAlpha(25),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon, color: Theme.of(context).colorScheme.primary),
-      ),
-      title: TextFormField(
-        controller: controller,
-        decoration: InputDecoration(
-          labelText: title,
-          border: InputBorder.none,
+  Widget _buildActionItem(
+      {required IconData icon,
+      required String text,
+      String? trailingText,
+      required VoidCallback onTap,
+      required Color primaryColor,
+      required Color cardColor,
+      required Color primaryText,
+      required Color secondaryText}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: primaryColor.withAlpha(50),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: primaryColor),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  text,
+                  style: GoogleFonts.manrope(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: primaryText,
+                  ),
+                ),
+              ),
+              if (trailingText != null)
+                Text(
+                  trailingText,
+                  style: GoogleFonts.manrope(fontSize: 14, color: secondaryText),
+                ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: secondaryText),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildNotificationItem(ThemeData theme, ThemeProvider themeProvider) {
-    return SwitchListTile(
-      secondary: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withAlpha(25),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(Icons.notifications, color: theme.colorScheme.primary),
-      ),
-      title: const Text('Notifications'),
-      value: true, // Replace with actual notification status
-      onChanged: (value) {
-        // Handle notification toggle
-      },
-    );
-  }
-
-  Widget _buildDarkModeItem(ThemeData theme, ThemeProvider themeProvider) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withAlpha(25),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(Icons.dark_mode, color: theme.colorScheme.primary),
-      ),
-      title: const Text('Dark Mode'),
-      trailing: DropdownButton<ThemeMode>(
-        value: themeProvider.themeMode,
-        items: const [
-          DropdownMenuItem(value: ThemeMode.system, child: Text('System')),
-          DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
-          DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
+  Widget _buildSettingsItem(
+      {required IconData icon,
+      required String text,
+      required Widget trailing,
+      required Color primaryColor,
+      required Color cardColor,
+      required Color primaryText}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: primaryColor.withAlpha(50),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: primaryColor),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              text,
+              style: GoogleFonts.manrope(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: primaryText,
+              ),
+            ),
+          ),
+          trailing,
         ],
-        onChanged: (value) {
-          if (value != null) {
-            themeProvider.setThemeMode(value);
-          }
-        },
       ),
     );
-  }
-
-  Future<void> _uploadPrescription() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Uploading ${pickedFile.name}...')),
-      );
-    }
-  }
-
-  Future<void> _launchURL(String url) async {
-    final uri = Uri.parse(url);
-    if (!await canLaunchUrl(uri)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not launch $url')),
-      );
-    } else {
-      await launchUrl(uri);
-    }
   }
 }

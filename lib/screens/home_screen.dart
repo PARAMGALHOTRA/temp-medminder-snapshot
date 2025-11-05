@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:medminder/models/medicine.dart';
-import 'package:medminder/screens/medication_form_screen.dart';
+import 'package:medminder/screens/order_screen.dart';
 import 'package:medminder/services/firestore_service.dart';
 import 'package:medminder/theme/app_theme.dart';
 import 'package:medminder/utils/app_texts.dart';
@@ -37,55 +37,44 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      body: StreamBuilder<List<Medicine>>(
-        stream: FirestoreService.getMedicinesStream(user!.uid),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          final medicines = snapshot.data ?? [];
+    return StreamBuilder<List<Medicine>>(
+      stream: FirestoreService.getMedicinesStream(user!.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+        final medicines = snapshot.data ?? [];
 
-          final takenMedicines = medicines.where((m) => m.isCompleted).length;
-          final progress = medicines.isEmpty ? 0.0 : takenMedicines / medicines.length;
+        final takenMedicines = medicines.where((m) => m.isCompleted).length;
+        final progress = medicines.isEmpty ? 0.0 : takenMedicines / medicines.length;
 
-          return CustomScrollView(
-            slivers: [
-              _buildAppBar(theme, context),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildDailyProgress(theme, progress, takenMedicines, medicines.length),
-                      const SizedBox(height: 24),
-                      if (medicines.any((m) => !m.isCompleted))
-                        _buildNextUp(theme, medicines.firstWhere((m) => !m.isCompleted)),
-                      const SizedBox(height: 24),
-                      _buildTipsCard(theme),
-                      const SizedBox(height: 24),
-                      _buildMedicineList(theme, medicines),
-                    ],
-                  ),
+        return CustomScrollView(
+          slivers: [
+            _buildAppBar(theme, context),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDailyProgress(theme, progress, takenMedicines, medicines.length),
+                    const SizedBox(height: 24),
+                    if (medicines.any((m) => !m.isCompleted))
+                      _buildNextUp(theme, medicines.firstWhere((m) => !m.isCompleted)),
+                    const SizedBox(height: 24),
+                    _buildTipsCard(theme),
+                    const SizedBox(height: 24),
+                    _buildMedicineList(theme, medicines),
+                  ],
                 ),
               ),
-            ],
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const MedicationFormScreen()),
-          );
-        },
-        child: const Icon(Icons.add),
-      ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -122,6 +111,16 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       actions: [
+        IconButton(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const OrderScreen()),
+            );
+          },
+          icon: const Icon(Icons.shopping_cart),
+          tooltip: 'Order Medicines',
+        ),
         IconButton(
           onPressed: () => setState(() {}), // Refreshes the stream
           icon: const Icon(Icons.refresh),
