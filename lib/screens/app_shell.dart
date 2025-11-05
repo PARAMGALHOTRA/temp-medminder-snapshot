@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:medminder/screens/history_screen.dart';
 import 'package:medminder/screens/home_screen.dart';
 import 'package:medminder/screens/medication_form_screen.dart';
-import 'package:medminder/screens/orders_screen.dart';
+import 'package:medminder/screens/order_screen.dart';
 import 'package:medminder/screens/profile_screen.dart';
 
 class AppShell extends StatefulWidget {
@@ -18,7 +18,7 @@ class _AppShellState extends State<AppShell> {
   static const List<Widget> _widgetOptions = <Widget>[
     HomeScreen(),
     HistoryScreen(),
-    OrdersScreen(),
+    OrderScreen(),
     ProfileScreen(),
   ];
 

@@ -2,34 +2,33 @@
 
 ## Overview
 
-MedMinder is a Flutter application designed to help users manage their medication schedules. The app allows users to log in, add their medications, set reminders, track their daily progress, and view their medication history.
+MedMinder is a Flutter application designed to help users manage their medications. It allows users to track their medication schedules, receive reminders, and reorder their prescriptions. The app is built with Flutter and uses Firebase for backend services such as authentication and data storage.
 
-## Style and Design
+## Project Style, Design, and Features
 
-The application follows Material Design 3 principles to provide a modern and intuitive user experience. The UI is designed to be clean, with a focus on readability and ease of use.
+### Style and Design
 
-- **Theming**: The app uses a centralized `ThemeData` object with a color scheme generated from a seed color. It supports both light and dark modes.
-- **Typography**: The app uses the `google_fonts` package for a consistent and visually appealing text style.
-- **Iconography**: The app uses Material Design icons to enhance usability and provide clear visual cues.
-- **Navigation**: The app uses a `BottomNavigationBar` for easy navigation between the main screens.
+*   **Theming**: The app uses a modern, clean design with a light and dark theme. The color scheme is based on Material Design 3 principles, with a primary color of `#4A90E2`. The typography is based on the `Manrope` and `GoogleFonts` font families.
+*   **Layout**: The app uses a bottom navigation bar for main navigation and has a consistent layout across all screens.
+*   **Components**: The app uses a variety of Material Design components, including cards, buttons, icons, and text fields.
 
-## Features
+### Features
 
-- **User Authentication**: Users can sign in using their Google account.
-- **Medication Management**: Users can add, view, and manage their medications.
-- **Daily Progress Tracking**: The app displays a circular progress indicator to show the percentage of medicines taken for the day.
-- **Next Dose Reminder**: The app highlights the next upcoming medication dose, with a visual indicator for overdue medicines.
-- **Categorized Medicine List**: Medicines are categorized into morning, afternoon, and evening sections for better organization.
-- **Medication History**:
-    - The app now has a `HistoryScreen` that displays a real-time log of all "Taken" and "Skipped" medication events.
-    - History is fetched from a `medication_logs` collection in Firestore.
-    - The history is grouped by date for easy readability.
-    - A mechanism is in place to automatically log missed doses.
+*   **Authentication**: Users can sign in to the app using their email and password.
+*   **Medication Tracking**: Users can add, edit, and delete their medications. Each medication has a name, dosage, and schedule.
+*   **Reminders**: Users receive notifications to remind them to take their medications.
+*   **Order Medicines**: Users can view their current medications and contact pharmacies to reorder them.
+*   **History**: Users can view a history of their medication intake.
+*   **Profile**: Users can view and edit their profile information.
 
-## Current Plan
+## Current Change: Fix Order Screen and Refactor
 
-The `HistoryScreen` currently displays placeholder statistics for "This Week's Adherence" and "Current Streak". The next step is to replace these placeholders with real, calculated data based on the user's medication logs.
+### Plan and Steps
 
-1.  **Calculate Weekly Adherence**: Implement a function to calculate the percentage of 'Taken' events over the last 7 days from the medication logs.
-2.  **Calculate Current Streak**: Implement a function to determine the number of consecutive days the user has taken at least one medication.
-3.  **Update UI**: Integrate these calculations into the `HistoryScreen` to display the dynamic stats in the UI cards.
+1.  **Delete redundant file**: Deleted the `lib/screens/orders_screen.dart` file to remove confusion and redundancy.
+2.  **Correct navigation**: Updated `lib/screens/app_shell.dart` to point the "Orders" tab to the correct `OrderScreen`.
+3.  **Refactor `OrderScreen`**: Refactored `lib/screens/order_screen.dart` to:
+    *   Fetch medication data from Firestore instead of using a hardcoded list.
+    *   Display an "empty cabinet" message when no medications are available.
+    *   Remove hardcoded colors and use `Theme.of(context)` for a cleaner and more maintainable codebase.
+4.  **Fix syntax error**: Corrected a syntax error in `lib/screens/order_screen.dart` where the entire file was wrapped in a multi-line string.
