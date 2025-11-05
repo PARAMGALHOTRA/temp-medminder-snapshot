@@ -112,7 +112,7 @@ class _OrderScreenState extends State<OrderScreen> {
             textAlign: TextAlign.center,
             style: GoogleFonts.manrope(
               fontSize: 16,
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              color: theme.colorScheme.onSurface.withAlpha(153),
             ),
           ),
           const SizedBox(height: 32),
@@ -164,7 +164,7 @@ class _OrderScreenState extends State<OrderScreen> {
             Text(
               medications,
               style: GoogleFonts.manrope(
-                  fontSize: 16, color: theme.colorScheme.onSurface.withOpacity(0.6)),
+                  fontSize: 16, color: theme.colorScheme.onSurface.withAlpha(153)),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
@@ -189,7 +189,7 @@ class _OrderScreenState extends State<OrderScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withOpacity(0.1),
+        color: theme.colorScheme.primary.withAlpha(26),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -212,7 +212,7 @@ class _OrderScreenState extends State<OrderScreen> {
                     Text(
                       'Set custom reminders to get notified before you run out of any medicine.',
                       style: GoogleFonts.manrope(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6), fontSize: 14),
+                          color: theme.colorScheme.onSurface.withAlpha(153), fontSize: 14),
                     ),
                   ],
                 ),
@@ -255,7 +255,7 @@ class _OrderScreenState extends State<OrderScreen> {
         'name': 'Netmeds',
         'phone': '+91 87654 32109',
         'logo':
-            'https://lh3.googleusercontent.com/aida-public/AB6AXuBPEdpII8ekV_pjV8bej957AqY_8TjSWAOLsk1qxepv0EGEFfSsoQAgc9ug7eixKSAMe2YyDJUkIoDU4E0vvoPoXsZbqVmIRFFBIQ2LROoZmp6i-Kw9aTCChvnOhdG-QlI0kF2BzbHUpYwJB-glpW_A7hopwJFFEO2GoPVTKrsFm6whBbPjyYw17d9giWU-1o8T_O8-58PYchxM3VRBlvfw6tGtX2iOlJKIzgmJ5Q4xjBKl7j5WkXqPCVlXx7WSKwkU68dw3OKMR6f-'
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuBPEdpII8ekV_pjV8bej957AqY_8TjSWAOLsk1qxepv0EGEFfSsoQAgc9ug7eixKSAMe2YyDJUkIoDU4E0vvoPoXsZbqVmIRFFBIQ2LROoZmp6i-Kw9aTCChvnOhdG-QlI0kF2BzbHUpYwJB-glpW_A7hopwJFFEO2GoPVTKrsFm6whBbPjyYw117d9giWU-1o8T_O8-58PYchxM3VRBlvfw6tGtX2iOlJKIzgmJ5Q4xjBKl7j5WkXqPCVlXx7WSKwkU68dw3OKMR6f-'
       },
       {
         'name': '1mg',
@@ -321,7 +321,7 @@ class _OrderScreenState extends State<OrderScreen> {
                   Text(
                     pharmacy['phone']!,
                     style: GoogleFonts.manrope(
-                        fontSize: 14, color: theme.colorScheme.onSurface.withOpacity(0.6)),
+                        fontSize: 14, color: theme.colorScheme.onSurface.withAlpha(153)),
                   ),
                 ],
               ),

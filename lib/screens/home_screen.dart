@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:medminder/models/medicine.dart';
 import 'package:medminder/screens/order_screen.dart';
+import 'package:medminder/services/daily_reset_service.dart';
 import 'package:medminder/services/firestore_service.dart';
 import 'package:medminder/theme/app_theme.dart';
 import 'package:medminder/utils/app_texts.dart';
@@ -15,9 +16,31 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final user = FirebaseAuth.instance.currentUser;
   String _currentTip = AppTexts.getRandomTip();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (user != null) {
+      DailyResetService.checkAndResetDailyMedications(user!.uid);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && user != null) {
+      FirestoreService.logSkippedDoses(user!.uid);
+    }
+  }
 
   void _changeTip() {
     setState(() {

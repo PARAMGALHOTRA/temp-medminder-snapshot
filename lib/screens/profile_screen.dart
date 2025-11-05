@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:medminder/providers/theme_provider.dart';
 import 'package:medminder/screens/auth_screen.dart';
 import 'package:medminder/screens/edit_profile_screen.dart';
@@ -7,6 +9,8 @@ import 'package:medminder/screens/emergency_contact_screen.dart';
 import 'package:medminder/screens/my_doctor_screen.dart';
 import 'package:medminder/services/firestore_service.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:medminder/services/notification_settings_service.dart';
+import 'package:medminder/services/storage_service.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -19,7 +23,27 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final user = FirebaseAuth.instance.currentUser;
+  late NotificationSettingsService _notificationSettingsService;
+  final StorageService _storageService = StorageService();
   bool _notificationsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (user != null) {
+      _notificationSettingsService = NotificationSettingsService(user!.uid);
+      _loadNotificationSettings();
+    }
+  }
+
+  Future<void> _loadNotificationSettings() async {
+    final bool isEnabled = await _notificationSettingsService.getNotificationsEnabled();
+    if (mounted) {
+      setState(() {
+        _notificationsEnabled = isEnabled;
+      });
+    }
+  }
 
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
@@ -38,6 +62,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not launch $url')),
         );
+      }
+    }
+  }
+
+  Future<void> _pickAndUploadImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null && user != null) {
+      final File imageFile = File(image.path);
+      final String? downloadUrl = await _storageService.uploadProfileImage(user!.uid, imageFile);
+
+      if (downloadUrl != null) {
+        await user!.updatePhotoURL(downloadUrl);
+        await FirestoreService.updateUserData(user!.uid, {'photoURL': downloadUrl});
+        setState(() {}); // Refresh the screen to show the new image
       }
     }
   }
@@ -90,12 +130,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 }
 
                 final userName = user?.displayName ?? 'Jessica Linden';
-                final userInitial = userName.isNotEmpty ? userName[0].toUpperCase() : 'J';
 
                 return ListView(
                   padding: const EdgeInsets.all(16.0),
                   children: [
-                    _buildProfileHeader(context, userName, userInitial, primaryColor, primaryText),
+                    _buildProfileHeader(context, userName, primaryColor, primaryText),
                     const SizedBox(height: 24),
                     _buildSection(
                       'Settings',
@@ -109,6 +148,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               setState(() {
                                 _notificationsEnabled = value;
                               });
+                              _notificationSettingsService.setNotificationsEnabled(value);
                             },
                             activeThumbColor: accentGreen,
                           ),
@@ -218,27 +258,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileHeader(
-      BuildContext context, String name, String initial, Color primaryColor, Color primaryText) {
+  Widget _buildProfileHeader(BuildContext context, String name, Color primaryColor, Color primaryText) {
+    final userInitial = name.isNotEmpty ? name[0].toUpperCase() : '';
+    final photoURL = user?.photoURL;
+
     return Column(
       children: [
-        Container(
-          height: 128,
-          width: 128,
-          decoration: BoxDecoration(
-            color: primaryColor.withAlpha(50),
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Text(
-              initial,
-              style: GoogleFonts.manrope(
-                fontSize: 50,
-                fontWeight: FontWeight.bold,
-                color: primaryColor,
+        Stack(
+          children: [
+            CircleAvatar(
+              radius: 64,
+              backgroundColor: primaryColor.withAlpha(50),
+              backgroundImage: (photoURL != null && photoURL.isNotEmpty) ? NetworkImage(photoURL) : null,
+              child: (photoURL == null || photoURL.isEmpty)
+                  ? Text(
+                      userInitial,
+                      style: GoogleFonts.manrope(
+                        fontSize: 50,
+                        fontWeight: FontWeight.bold,
+                        color: primaryColor,
+                      ),
+                    )
+                  : null,
+            ),
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: GestureDetector(
+                onTap: _pickAndUploadImage,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                ),
               ),
             ),
-          ),
+          ],
         ),
         const SizedBox(height: 16),
         GestureDetector(
@@ -285,7 +345,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withAlpha(13),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 )
