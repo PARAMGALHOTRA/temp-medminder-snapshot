@@ -1,10 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:medminder/models/medicine.dart';
+import 'package:medminder/screens/medication_form_screen.dart';
 import 'package:medminder/screens/order_screen.dart';
 import 'package:medminder/services/daily_reset_service.dart';
 import 'package:medminder/services/firestore_service.dart';
+import 'package:medminder/services/notification_service.dart';
 import 'package:medminder/theme/app_theme.dart';
 import 'package:medminder/utils/app_texts.dart';
 import 'package:share_plus/share_plus.dart';
@@ -56,6 +60,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _deleteMedicine(Medicine medicine) async {
+    if (user == null || medicine.id == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Medicine?'),
+        content: Text('Are you sure you want to delete ${medicine.name}? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirestoreService.deleteMedicine(user!.uid, medicine.id!);
+      await NotificationService().cancelNotification(medicine.hashCode);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${medicine.name} deleted successfully.')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -70,6 +103,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           return Center(child: Text('Error: ${snapshot.error}'));
         }
         final medicines = snapshot.data ?? [];
+
+        if (medicines.isEmpty) {
+          return _buildEmptyState(context, theme);
+        }
 
         final takenMedicines = medicines.where((m) => m.isCompleted).length;
         final progress = medicines.isEmpty ? 0.0 : takenMedicines / medicines.length;
@@ -100,6 +137,57 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       },
     );
   }
+
+    Widget _buildEmptyState(BuildContext context, ThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.medical_services_outlined,
+              size: 100,
+              color: theme.colorScheme.primary.withOpacity(0.5),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Your Cabinet is Empty',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.manrope(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: theme.textTheme.titleLarge?.color,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Get started by adding your medications to stay on top of your health journey.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.manrope(
+                fontSize: 16,
+                color: theme.textTheme.bodyMedium?.color,
+              ),
+            ),
+            const SizedBox(height: 40),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Add Your First Medicine'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const MedicationFormScreen()),
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   SliverAppBar _buildAppBar(ThemeData theme, BuildContext context) {
     return SliverAppBar(
@@ -345,47 +433,77 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildMedicineCard(ThemeData theme, Medicine medicine) {
     final bool isSkipped = !medicine.isCompleted && (medicine.nextDose?.isBefore(DateTime.now()) ?? false);
 
-    return Card(
-      elevation: 1,
-      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: medicine.isCompleted ? AppTheme.accentGreen.withAlpha(30) : (isSkipped ? AppTheme.errorLight.withAlpha(50) : theme.cardColor),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            _buildMedicationIcon(theme, medicine, isSkipped),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(medicine.name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(
-                    medicine.isCompleted
-                        ? 'Taken at ${DateFormat.jm().format(medicine.nextDose!)}'
-                        : (isSkipped ? 'Skipped' : DateFormat.jm().format(medicine.nextDose!)),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: isSkipped ? AppTheme.errorDark : (medicine.isCompleted ? AppTheme.accentGreenDark : null),
-                      fontWeight: isSkipped || medicine.isCompleted ? FontWeight.bold : FontWeight.normal,
+    return Slidable(
+      key: ValueKey(medicine.id),
+      startActionPane: ActionPane(
+        motion: const DrawerMotion(),
+        children: [
+          SlidableAction(
+            onPressed: (_) => _deleteMedicine(medicine),
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+            icon: Icons.delete,
+            label: 'Delete',
+          ),
+          SlidableAction(
+            onPressed: (_) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => MedicationFormScreen(medicine: medicine),
+                ),
+              );
+            },
+            backgroundColor: theme.colorScheme.primary,
+            foregroundColor: Colors.white,
+            icon: Icons.edit,
+            label: 'Edit',
+          ),
+        ],
+      ),
+      child: Card(
+        elevation: 1,
+        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: medicine.isCompleted
+            ? AppTheme.accentGreen.withAlpha(30)
+            : (isSkipped ? AppTheme.errorLight.withAlpha(50) : theme.cardColor),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              _buildMedicationIcon(theme, medicine, isSkipped),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(medicine.name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(
+                      medicine.isCompleted
+                          ? 'Taken at ${DateFormat.jm().format(medicine.nextDose!)}'
+                          : (isSkipped ? 'Skipped' : DateFormat.jm().format(medicine.nextDose!)),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: isSkipped ? AppTheme.errorDark : (medicine.isCompleted ? AppTheme.accentGreenDark : null),
+                        fontWeight: isSkipped || medicine.isCompleted ? FontWeight.bold : FontWeight.normal,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (!medicine.isCompleted && !isSkipped)
-              ElevatedButton(
-                onPressed: () {
-                   if (user != null && medicine.id != null) {
+              if (!medicine.isCompleted && !isSkipped)
+                ElevatedButton(
+                  onPressed: () {
+                    if (user != null && medicine.id != null) {
                       FirestoreService.updateMedicineStatus(user!.uid, medicine.id!, true);
                     }
-                },
-                child: const Text('Take'),
-              )
-            else if (medicine.isCompleted)
-              const Icon(Icons.check_circle, color: AppTheme.accentGreenDark)
-          ],
+                  },
+                  child: const Text('Take'),
+                )
+              else if (medicine.isCompleted)
+                const Icon(Icons.check_circle, color: AppTheme.accentGreenDark)
+            ],
+          ),
         ),
       ),
     );

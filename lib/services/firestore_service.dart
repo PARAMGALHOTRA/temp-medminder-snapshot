@@ -94,6 +94,15 @@ class FirestoreService {
         .add(medicine.toMap());
   }
 
+  static Future<void> deleteMedicine(String userId, String medicineId) {
+    return _db
+        .collection('users')
+        .doc(userId)
+        .collection('medicines')
+        .doc(medicineId)
+        .delete();
+  }
+
   static Future<DocumentSnapshot> getUserData(String userId) {
     return _db.collection('users').doc(userId).get();
   }
